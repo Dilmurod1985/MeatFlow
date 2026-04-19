@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MeatFlow — Панель управления</title>
+  <style>
+    :root{--primary:#2b7cff;--card-bg:#fff;--card-border:#e6eefc}
+    body{font-family:Inter, Roboto, Arial, sans-serif;background:#f5f7fb;margin:0;padding:16px}
+    .wrap{max-width:1000px;margin:0 auto}
+    h1{font-size:20px;margin:0 0 12px}
+    .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .item{background:var(--card-bg);border:1px solid var(--card-border);padding:12px;border-radius:10px}
+    .name{font-weight:700;margin-bottom:6px}
+    .meta{font-size:13px;color:#555}
+    .progress{height:10px;background:#eef3ff;border-radius:8px;margin-top:8px;overflow:hidden}
+    .bar{height:100%;background:var(--primary);width:0%}
+    .actions{margin-top:10px;display:flex;gap:8px}
+    button{padding:10px 12px;border-radius:8px;border:0;background:var(--primary);color:#fff;cursor:pointer}
+    @media (pointer:coarse){button{padding:14px 16px;font-size:17px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Панель управления — Статус цехов</h1>
+    <div id="last-updated" style="font-size:13px;color:#666;margin-bottom:8px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div id="last-updated" style="font-size:13px;color:#666"></div>
+      <div><button id="download-report">Скачать отчет по выпуску</button></div>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+
+  <script>
+    async function loadStatus(){
+      try{
+        const res = await fetch('/status_all');
+        if(!res.ok) throw new Error('Ошибка');
+        const data = await res.json();
+        render(data.workshops);
+      }catch(e){ console.error(e); document.getElementById('list').innerHTML = '<div style="color:#900">Ошибка загрузки статуса</div>'; }
+    }
+
+    function render(items){
+      const root = document.getElementById('list');
+      root.innerHTML = '';
+      items.forEach(it=>{
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.innerHTML = `
+          <div class="name">${it.workshop_name}</div>
+          <div class="meta">План: ${it.plan_output} — Произведено: ${it.produced_today}</div>
+          <div class="progress"><div class="bar" style="width:${Math.min(100, it.load_percent)}%"></div></div>
+          <div style="margin-top:6px;font-size:13px;color:#333">Загрузка: <strong>${it.load_percent}%</strong></div>
+          <div class="actions">
+            <button onclick="location.href='/?workshop=${it.workshop_id}'">Детали</button>
+          </div>
+        `;
+        root.appendChild(div);
+      });
+      document.getElementById('last-updated').textContent = 'Обновлено: ' + new Date().toLocaleString();
+    }
+
+    // initial load
+    loadStatus();
+    // refresh every 60 seconds
+    setInterval(loadStatus, 60000);
+
+    // Listen for updates from dashboard (localStorage) to refresh immediately
+    window.addEventListener('storage', (e)=>{
+      if(e.key === 'meatflow:update') loadStatus();
+    });
+
+    document.getElementById('download-report').addEventListener('click', ()=>{
+      // download CSV
+      window.location.href = '/export/logs';
+    });
+  </script>
+</body>
+</html>

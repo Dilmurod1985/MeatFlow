@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MeatFlow Dashboard</title>
+  <style>
+    :root{
+      --card-bg: #fff;
+      --card-border: #ddd;
+      --primary: #2b7cff;
+      --danger: #e03e2d;
+      --area-padding: 16px;
+    }
+    html,body{height:100%;margin:0;padding:0;font-family:Inter, Roboto, Arial, sans-serif;background:#f5f7fb}
+    .wrap{max-width:1200px;margin:12px auto;padding:12px}
+    h1{font-size:20px;margin:0 0 12px}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+
+    .card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.04);display:flex;flex-direction:column;min-height:220px}
+    .card h2{margin:0 0 8px;font-size:18px}
+    .card.highlight{box-shadow:0 4px 18px rgba(43,124,255,0.18);border-color:var(--primary)}
+
+    .big-number{font-size:28px;font-weight:700;color:var(--primary);text-align:center;padding:8px 0}
+    .progress{height:12px;background:#eef3ff;border-radius:8px;overflow:hidden;margin-top:8px}
+    .progress .bar{height:100%;background:var(--primary);width:0%}
+
+    .row{display:flex;gap:8px;align-items:center}
+    .col{flex:1}
+
+    label{font-size:13px;color:#333}
+    input[type="text"], input[type="number"], input[type="date"], select{
+      width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box
+    }
+
+    button{background:var(--primary);color:#fff;border:0;padding:12px 14px;border-radius:10px;font-size:15px;cursor:pointer}
+    button.secondary{background:#6c757d}
+    button.danger{background:var(--danger)}
+    button.full{width:100%}
+
+    .small{font-size:13px;color:#666;margin-top:6px}
+
+    .inventory{margin-top:8px;flex:1;overflow:auto}
+    .inventory ul{margin:0;padding:0;list-style:none}
+    .inventory li{padding:6px 8px;border-bottom:1px dashed #eee;font-size:14px;display:flex;justify-content:space-between}
+
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+
+    /* simple modal */
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);padding:16px}
+    .modal .panel{background:#fff;padding:16px;border-radius:12px;max-width:420px;width:100%}
+    .modal.show{display:flex}
+
+    @media (pointer:coarse){
+      button{padding:16px;font-size:18px;border-radius:12px}
+      input{padding:14px;font-size:17px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>MeatFlow — Dashboard цехов</h1>
+
+    <div class="grid" id="cards"></div>
+  </div>
+
+  <!-- Modal for forms -->
+  <div id="modal" class="modal" role="dialog" aria-hidden="true">
+    <div class="panel" id="modalPanel"></div>
+  </div>
+
+  <script>
+    // simple toast mechanism
+    function toast(message, type='info'){
+      let container = document.getElementById('toast-container');
+      if(!container){
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.position = 'fixed';
+        container.style.right = '16px';
+        container.style.top = '16px';
+        container.style.zIndex = 9999;
+        document.body.appendChild(container);
+      }
+      const el = document.createElement('div');
+      el.textContent = message;
+      el.style.background = type==='success'? '#1e7e34' : (type==='error'? '#b21f2d' : '#2b7cff');
+      el.style.color = '#fff';
+      el.style.padding = '10px 14px';
+      el.style.marginTop = '8px';
+      el.style.borderRadius = '8px';
+      el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+      el.style.fontSize = '15px';
+      container.appendChild(el);
+      setTimeout(()=>{ el.style.opacity = '0'; setTimeout(()=> el.remove(), 400); }, 4000);
+    }
+    const workshops = [
+      { id: 1, name: 'Филе' },
+      { id: 2, name: 'Котлеты' },
+      { id: 3, name: 'Разделка' },
+      { id: 4, name: 'Фарш' },
+      { id: 5, name: 'Шпажирование' },
+    ];
+
+    const cardsRoot = document.getElementById('cards');
+    const modal = document.getElementById('modal');
+    const modalPanel = document.getElementById('modalPanel');
+
+    function showModal(html){
+      modalPanel.innerHTML = html;
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden','false');
+    }
+    function hideModal(){
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden','true');
+      modalPanel.innerHTML = '';
+    }
+    modal.addEventListener('click', (e)=>{ if(e.target===modal) hideModal(); });
+
+    async function fetchStock(id){
+      const res = await fetch(`/stock/${id}`);
+      if(!res.ok) throw new Error('Ошибка получения статуса');
+      return await res.json();
+    }
+
+    async function postReceive(payload){
+      const res = await fetch('/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      return res.json();
+    }
+
+    async function postSetPlan(payload){
+      const res = await fetch('/set-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      return res.json();
+    }
+
+    async function postRelease(workshop_id, amount){
+      const url = `/release/${workshop_id}?amount=${encodeURIComponent(amount)}`;
+      const res = await fetch(url,{method:'POST'});
+      return res.json();
+    }
+
+    function createCardSkeleton(w){
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.id = `card-${w.id}`;
+      el.innerHTML = `
+        <h2>${w.name}</h2>
+        <div class="small">Нужно произвести сегодня</div>
+        <div class="big-number" id="need-${w.id}">—</div>
+        <div class="small">Загрузка: <span id="load-${w.id}">0%</span></div>
+        <div class="progress"><div class="bar" id="bar-${w.id}"></div></div>
+
+        <div class="row" style="gap:10px;margin-top:6px">
+          <div class="col">
+            <label for="plan-${w.id}">План на сегодня</label>
+            <input id="plan-${w.id}" type="number" step="0.01" />
+          </div>
+          <div style="width:110px;display:flex;align-items:end">
+            <button id="saveplan-${w.id}" class="full">Сохранить</button>
+          </div>
+        </div>
+
+        <div class="inventory" id="inv-${w.id}"></div>
+
+        <div class="actions">
+          <button id="receive-${w.id}">Приемка</button>
+          <button id="release-${w.id}" class="secondary">Выпуск</button>
+        </div>
+      `;
+      return el;
+    }
+
+    function renderInventoryList(container, inventory){
+      if(!inventory || inventory.length===0){
+        container.innerHTML = '<div class="small">Нет позиций в остатках</div>';
+        return;
+      }
+      const ul = document.createElement('ul');
+      inventory.forEach(it=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${it.item_name}${it.is_finished? ' (готово)':''}</span><strong>${Number(it.current_stock).toLocaleString('ru-RU')}</strong>`;
+        ul.appendChild(li);
+      });
+      container.innerHTML = '';
+      container.appendChild(ul);
+    }
+
+    async function refreshCard(w){
+      try{
+        const data = await fetchStock(w.id);
+        document.getElementById(`need-${w.id}`).textContent = Number(data.need_to_produce).toLocaleString('ru-RU');
+        const planInput = document.getElementById(`plan-${w.id}`);
+        planInput.value = data.plan_output ?? 0;
+        renderInventoryList(document.getElementById(`inv-${w.id}`), data.inventory);
+        // use server-provided values when available
+        const produced = Number(data.produced_today ?? (data.inventory || []).reduce((s,it)=> s + (it.is_finished? Number(it.current_stock):0), 0));
+        const plan = Number(data.plan_output) || 0;
+        const load = Math.round(Number(data.load_percent ?? (plan>0 ? (produced/plan*100) : 0)) || 0);
+        const loadEl = document.getElementById(`load-${w.id}`);
+        const barEl = document.getElementById(`bar-${w.id}`);
+        if(loadEl) loadEl.textContent = `${load}%`;
+        if(barEl) barEl.style.width = `${Math.min(100, load)}%`;
+      }catch(err){
+        console.error(err);
+        const el = document.getElementById(`card-${w.id}`);
+        if(el) el.querySelector('.inventory').innerHTML = '<div class="small">Ошибка загрузки</div>';
+      }
+    }
+
+    function attachHandlers(w){
+      document.getElementById(`receive-${w.id}`).addEventListener('click', ()=>{
+        showModal(`
+          <h3>Приемка — ${w.name}</h3>
+          <label>Название сырья</label>
+          <input id="m-item" type="text" list="m-items" placeholder="название или выберите из списка" />
+          <datalist id="m-items"></datalist>
+          <label style="margin-top:8px">Вес (кг)</label>
+          <input id="m-qty" type="number" step="0.01" />
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button id="m-send">Отправить</button>
+            <button id="m-cancel" class="secondary">Отмена</button>
+          </div>
+        `);
+        document.getElementById('m-cancel').addEventListener('click', hideModal);
+
+        // populate datalist with existing inventory items for this workshop
+        (async ()=>{
+          try{
+            const info = await fetchStock(w.id);
+            const dl = document.getElementById('m-items');
+            if(dl && info.inventory){
+              dl.innerHTML = '';
+              const names = new Set();
+              info.inventory.forEach(it=>{ if(it.item_name && !it.is_finished) names.add(it.item_name); });
+              names.forEach(n=>{ const opt = document.createElement('option'); opt.value = n; dl.appendChild(opt); });
+            }
+          }catch(e){ /* ignore */ }
+        })();
+
+        document.getElementById('m-send').addEventListener('click', async ()=>{
+          const item = document.getElementById('m-item').value.trim();
+          const qty = parseFloat(document.getElementById('m-qty').value);
+          if(!item || isNaN(qty) || qty<=0){ toast('Введите корректные данные','error'); return; }
+          try{
+            const resp = await postReceive({workshop_id: w.id, item_name: item, quantity: qty});
+            hideModal();
+            toast('Товар принят на склад','success');
+            // update inventory list and progress immediately
+            await refreshCard(w);
+            // also notify control panel by fetching status_all (so it updates on server side)
+            try{ await fetch('/status_all'); }catch(e){/* ignore */}
+          }catch(e){ toast('Ошибка при приемке','error'); console.error(e); }
+        });
+      });
+
+      document.getElementById(`saveplan-${w.id}`).addEventListener('click', async ()=>{
+        const value = parseFloat(document.getElementById(`plan-${w.id}`).value || 0);
+        if(isNaN(value) || value<0){ toast('План должен быть числом >= 0','error'); return; }
+        const today = new Date().toISOString().slice(0,10);
+        try{
+          const resp = await postSetPlan({workshop_id: w.id, date: today, plan_output: value});
+          // update UI immediately using server response
+          const load = Math.round(Number(resp.load_percent || 0));
+          const produced = Number(resp.produced_today || 0);
+          const planOutput = Number(resp.plan_output || value || 0);
+          const need = Math.max(0, planOutput - produced);
+          const loadEl = document.getElementById(`load-${w.id}`);
+          const barEl = document.getElementById(`bar-${w.id}`);
+          const needEl = document.getElementById(`need-${w.id}`);
+          if(loadEl) loadEl.textContent = `${load}%`;
+          if(barEl) barEl.style.width = `${Math.min(100, load)}%`;
+          if(needEl) needEl.textContent = Number(need).toLocaleString('ru-RU');
+          // notify other tabs / control panel about update
+          try{ localStorage.setItem('meatflow:update', Date.now().toString()); }catch(e){}
+        }catch(e){ toast('Ошибка при сохранении плана','error'); console.error(e); }
+      });
+
+      document.getElementById(`release-${w.id}`).addEventListener('click', ()=>{
+        showModal(`
+          <h3>Выпуск — ${w.name}</h3>
+          <label>Количество готовой продукции</label>
+          <input id="r-qty" type="number" step="0.01" />
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button id="r-send">Выпустить</button>
+            <button id="r-cancel" class="secondary">Отмена</button>
+          </div>
+        `);
+        document.getElementById('r-cancel').addEventListener('click', hideModal);
+        document.getElementById('r-send').addEventListener('click', async ()=>{
+          const qty = parseFloat(document.getElementById('r-qty').value);
+          if(isNaN(qty) || qty<=0){ toast('Введите корректное количество','error'); return; }
+          try{
+            const resp = await postRelease(w.id, qty);
+            hideModal();
+            // update UI immediately from response
+            const load = Math.round(Number(resp.load_percent || 0));
+            const produced = Number(resp.produced_today || resp.finished_stock || 0);
+            const planOutput = Number(resp.plan_output || 0);
+            const need = Math.max(0, planOutput - produced);
+            const loadEl = document.getElementById(`load-${w.id}`);
+            const barEl = document.getElementById(`bar-${w.id}`);
+            const needEl = document.getElementById(`need-${w.id}`);
+            if(loadEl) loadEl.textContent = `${load}%`;
+            if(barEl) barEl.style.width = `${Math.min(100, load)}%`;
+            if(needEl) needEl.textContent = Number(need).toLocaleString('ru-RU');
+            // notify other tabs / control panel
+            try{ localStorage.setItem('meatflow:update', Date.now().toString()); }catch(e){}
+          }catch(e){ toast('Ошибка при выпуске','error'); console.error(e); }
+        });
+      });
+    }
+
+    // build UI
+    for(const w of workshops){
+      const card = createCardSkeleton(w);
+      cardsRoot.appendChild(card);
+      attachHandlers(w);
+      refreshCard(w);
+    }
+
+    // If opened from control panel with ?workshop=ID, scroll to card and highlight
+    const params = new URLSearchParams(window.location.search);
+    const targetWorkshop = params.get('workshop');
+    if(targetWorkshop){
+      const el = document.getElementById(`card-${targetWorkshop}`);
+      if(el){
+        el.scrollIntoView({behavior:'smooth',block:'center'});
+        el.classList.add('highlight');
+        setTimeout(()=> el.classList.remove('highlight'), 6000);
+      }
+    }
+
+    // auto-refresh every 20 seconds
+    setInterval(()=>{ for(const w of workshops) refreshCard(w); }, 20000);
+  </script>
+</body>
+</html>
