@@ -234,6 +234,28 @@ def release(workshop_id: int, amount: float, db: Session = Depends(get_db)):
     return {"status": "ok", "workshop_id": workshop_id, "finished_stock": finished_item.current_stock, "produced_today": produced, "plan_output": plan_output, "load_percent": load_percent}
 
 
+@app.post("/clear-workshop/{workshop_id}")
+def clear_workshop(workshop_id: int, db: Session = Depends(get_db)):
+    workshop = db.query(models.Workshop).filter(models.Workshop.id == workshop_id).first()
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+    
+    # Clear all inventory for this workshop
+    db.query(models.Inventory).filter(models.Inventory.workshop_id == workshop_id).delete()
+    
+    # Clear today's plan for this workshop
+    today = date.today()
+    plan = db.query(models.ProductionPlan).filter(
+        models.ProductionPlan.workshop_id == workshop_id,
+        models.ProductionPlan.date == today
+    ).first()
+    if plan:
+        db.delete(plan)
+    
+    db.commit()
+    return {"status": "ok", "message": "All workshop data cleared"}
+
+
 @app.get("/status_all")
 def status_all(db: Session = Depends(get_db)):
     ensure_workshops(db)

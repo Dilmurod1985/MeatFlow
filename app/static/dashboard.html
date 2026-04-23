@@ -16,7 +16,9 @@
     .wrap{max-width:1200px;margin:12px auto;padding:12px}
     h1{font-size:20px;margin:0 0 12px}
 
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    @media (max-width: 900px){.grid{grid-template-columns:repeat(2,1fr)}}
+    @media (max-width: 600px){.grid{grid-template-columns:1fr}}
 
     .card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.04);display:flex;flex-direction:column;min-height:220px}
     .card h2{margin:0 0 8px;font-size:18px}
@@ -259,18 +261,32 @@
       document.getElementById(`clearplan-${w.id}`).addEventListener('click', async ()=>{
         const today = new Date().toISOString().slice(0,10);
         try{
+          // Clear plan
           const resp = await postSetPlan({workshop_id: w.id, date: today, plan_output: 0});
           document.getElementById(`plan-${w.id}`).value = '';
-          // update UI immediately
+          
+          // Clear all inventory items for this workshop
+          try{
+            await fetch(`/clear-workshop/${w.id}`, {method: 'POST'});
+          }catch(e){ /* ignore if endpoint doesn't exist */ }
+          
+          // Update UI immediately
           const loadEl = document.getElementById(`load-${w.id}`);
           const barEl = document.getElementById(`bar-${w.id}`);
           const needEl = document.getElementById(`need-${w.id}`);
+          const invEl = document.getElementById(`inv-${w.id}`);
+          
           if(loadEl) loadEl.textContent = '0%';
           if(barEl) barEl.style.width = '0%';
           if(needEl) needEl.textContent = '0';
-          toast('План очищен','success');
+          if(invEl) invEl.innerHTML = '<div class="small">Нет позиций в остатках</div>';
+          
+          toast('Все данные очищены','success');
           try{ localStorage.setItem('meatflow:update', Date.now().toString()); }catch(e){}
-        }catch(e){ toast('Ошибка при очистке плана','error'); console.error(e); }
+          
+          // Refresh card to get updated data
+          setTimeout(() => refreshCard(w), 500);
+        }catch(e){ toast('Ошибка при очистке данных','error'); console.error(e); }
       });
 
       document.getElementById(`saveplan-${w.id}`).addEventListener('click', async ()=>{
