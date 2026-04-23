@@ -7,3 +7,7 @@ venv/
 .DS_Store
 /.vscode/
 /.idea/
+.vs/
+*.slnx
+*.db-shm
+*.db-wal

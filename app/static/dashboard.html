@@ -155,10 +155,11 @@
         <div class="row" style="gap:10px;margin-top:6px">
           <div class="col">
             <label for="plan-${w.id}">План на сегодня</label>
-            <input id="plan-${w.id}" type="number" step="0.01" />
+            <input id="plan-${w.id}" type="text" placeholder="Введите вес" />
           </div>
-          <div style="width:110px;display:flex;align-items:end">
-            <button id="saveplan-${w.id}" class="full">Сохранить</button>
+          <div style="display:flex;gap:6px;align-items:end">
+            <button id="clearplan-${w.id}" class="secondary" style="width:60px">Очистить</button>
+            <button id="saveplan-${w.id}" style="flex:1">Сохранить</button>
           </div>
         </div>
 
@@ -192,7 +193,7 @@
         const data = await fetchStock(w.id);
         document.getElementById(`need-${w.id}`).textContent = Number(data.need_to_produce).toLocaleString('ru-RU');
         const planInput = document.getElementById(`plan-${w.id}`);
-        planInput.value = data.plan_output ?? 0;
+        planInput.value = data.plan_output && data.plan_output > 0 ? data.plan_output : '';
         renderInventoryList(document.getElementById(`inv-${w.id}`), data.inventory);
         // use server-provided values when available
         const produced = Number(data.produced_today ?? (data.inventory || []).reduce((s,it)=> s + (it.is_finished? Number(it.current_stock):0), 0));
@@ -253,6 +254,23 @@
             try{ await fetch('/status_all'); }catch(e){/* ignore */}
           }catch(e){ toast('Ошибка при приемке','error'); console.error(e); }
         });
+      });
+
+      document.getElementById(`clearplan-${w.id}`).addEventListener('click', async ()=>{
+        const today = new Date().toISOString().slice(0,10);
+        try{
+          const resp = await postSetPlan({workshop_id: w.id, date: today, plan_output: 0});
+          document.getElementById(`plan-${w.id}`).value = '';
+          // update UI immediately
+          const loadEl = document.getElementById(`load-${w.id}`);
+          const barEl = document.getElementById(`bar-${w.id}`);
+          const needEl = document.getElementById(`need-${w.id}`);
+          if(loadEl) loadEl.textContent = '0%';
+          if(barEl) barEl.style.width = '0%';
+          if(needEl) needEl.textContent = '0';
+          toast('План очищен','success');
+          try{ localStorage.setItem('meatflow:update', Date.now().toString()); }catch(e){}
+        }catch(e){ toast('Ошибка при очистке плана','error'); console.error(e); }
       });
 
       document.getElementById(`saveplan-${w.id}`).addEventListener('click', async ()=>{
