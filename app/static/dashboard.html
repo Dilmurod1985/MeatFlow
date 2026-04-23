@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>MeatFlow Dashboard</title>
   <style>
     :root{
@@ -225,11 +228,43 @@
 
     function attachHandlers(w){
       document.getElementById(`receive-${w.id}`).addEventListener('click', ()=>{
+        // Get raw materials based on workshop
+        let rawMaterials = [];
+        let placeholder = '';
+        
+        switch(w.name) {
+          case 'Шпажирование':
+            rawMaterials = ['Кийма', 'Думба', 'Лахм', 'Мариновка соус', 'Специи'];
+            placeholder = 'Кийма, Думба, Лахм...';
+            break;
+          case 'Разделка':
+            rawMaterials = ['Мясо 41', 'Мясо 44', 'ТОЗА ЛАХM'];
+            placeholder = 'Мясо 41, Мясо 44, ТОЗА ЛАХM...';
+            break;
+          case 'Филе':
+            rawMaterials = ['Бедро б/к', 'Окорочка б/к', 'Вырезка гов', 'Филе куринное', 'Мариновка соус'];
+            placeholder = 'Бедро б/к, Окорочка б/к, Вырезка гов...';
+            break;
+          case 'Фарш':
+            rawMaterials = ['Мясо гов', 'Чарви гов', 'Думба гов', 'КИЙМА', 'ФОСФАТ', 'ФАЙВЕР'];
+            placeholder = 'Мясо гов, Чарви гов, Думба гов...';
+            break;
+          case 'Котлеты':
+            rawMaterials = ['Лахм', 'Качалка', 'Куринный Бедро', 'Думба', 'Чарви', 'Филе отход', 'ТОЗА ЛАХM'];
+            placeholder = 'Лахм, Качалка, Куринный Бедро...';
+            break;
+          default:
+            rawMaterials = ['Сырье 1', 'Сырье 2', 'Сырье 3'];
+            placeholder = 'Выберите сырье...';
+        }
+        
         showModal(`
           <h3>Приемка — ${w.name}</h3>
           <label>Название сырья</label>
-          <input id="m-item" type="text" list="m-items" placeholder="название или выберите из списка" />
-          <datalist id="m-items"></datalist>
+          <select id="m-item" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:15px;box-sizing:border-box">
+            <option value="">Выберите сырье...</option>
+            ${rawMaterials.map(item => `<option value="${item}">${item}</option>`).join('')}
+          </select>
           <label style="margin-top:8px">Вес (кг)</label>
           <input id="m-qty" type="tel" pattern="[0-9]*" inputmode="numeric" />
           <div style="display:flex;gap:8px;margin-top:12px">
@@ -357,17 +392,44 @@
       });
 
       document.getElementById(`meat-${w.id}`).addEventListener('click', ()=>{
+        // Get meat types based on workshop
+        let meatTypes = [];
+        let placeholder = '';
+        
+        switch(w.name) {
+          case 'Шпажирование':
+            meatTypes = ['Кийма', 'Думба', 'Лахм'];
+            placeholder = 'Кийма, Думба, Лахм...';
+            break;
+          case 'Разделка':
+            meatTypes = ['Мясо 41', 'Мясо 44'];
+            placeholder = 'Мясо 41, Мясо 44...';
+            break;
+          case 'Филе':
+            meatTypes = ['Бедро б/к', 'Окорочка б/к', 'Вырезка гов', 'Филе куринное'];
+            placeholder = 'Бедро б/к, Окорочка б/к...';
+            break;
+          case 'Фарш':
+            meatTypes = ['Мясо гов', 'Чарви гов', 'Думба гов'];
+            placeholder = 'Мясо гов, Чарви гов...';
+            break;
+          case 'Котлеты':
+            meatTypes = ['Лахм', 'Качалка', 'Куринный Бедро', 'Думба', 'Чарви', 'Филе отход'];
+            placeholder = 'Лахм, Качалка, Куринный Бедро...';
+            break;
+          default:
+            meatTypes = ['Лахм', 'Качалка', 'Куринный Бедро'];
+            placeholder = 'Выберите тип мяса...';
+        }
+        
+        const datalistOptions = meatTypes.map(type => `<option value="${type}">`).join('');
+        
         showModal(`
           <h3>Учет мяса — ${w.name}</h3>
           <label>Тип мяса</label>
-          <input id="meat-type" type="text" list="meat-types" placeholder="Лахм, Качалка, Куринный Бедро..." />
+          <input id="meat-type" type="text" list="meat-types" placeholder="${placeholder}" />
           <datalist id="meat-types">
-            <option value="Лахм">
-            <option value="Качалка">
-            <option value="Куринный Бедро">
-            <option value="Думба">
-            <option value="Чарви">
-            <option value="Филе отход">
+            ${datalistOptions}
           </datalist>
           <label style="margin-top:8px">Количество (кг)</label>
           <input id="meat-qty" type="tel" pattern="[0-9]*" inputmode="numeric" />
