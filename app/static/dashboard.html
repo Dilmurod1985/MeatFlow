@@ -47,7 +47,7 @@
     .inventory ul{margin:0;padding:0;list-style:none}
     .inventory li{padding:6px 8px;border-bottom:1px dashed #eee;font-size:14px;display:flex;justify-content:space-between}
 
-    .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    .actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px}
 
     /* simple modal */
     .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);padding:16px}
@@ -143,6 +143,16 @@
       return res.json();
     }
 
+    async function postMeatConsumption(payload){
+      const res = await fetch('/meat-consumption',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      return res.json();
+    }
+
+    async function getMeatConsumption(workshop_id){
+      const res = await fetch(`/meat-consumption/${workshop_id}`);
+      return res.json();
+    }
+
     function createCardSkeleton(w){
       const el = document.createElement('div');
       el.className = 'card';
@@ -169,6 +179,7 @@
 
         <div class="actions">
           <button id="receive-${w.id}">Приемка</button>
+          <button id="meat-${w.id}" class="secondary">Мясо</button>
           <button id="release-${w.id}" class="secondary">Выпуск</button>
         </div>
       `;
@@ -342,6 +353,56 @@
             // notify other tabs / control panel
             try{ localStorage.setItem('meatflow:update', Date.now().toString()); }catch(e){}
           }catch(e){ toast('Ошибка при выпуске','error'); console.error(e); }
+        });
+      });
+
+      document.getElementById(`meat-${w.id}`).addEventListener('click', ()=>{
+        showModal(`
+          <h3>Учет мяса — ${w.name}</h3>
+          <label>Тип мяса</label>
+          <input id="meat-type" type="text" list="meat-types" placeholder="Лахм, Качалка, Куринный Бедро..." />
+          <datalist id="meat-types">
+            <option value="Лахм">
+            <option value="Качалка">
+            <option value="Куринный Бедро">
+            <option value="Думба">
+            <option value="Чарви">
+            <option value="Филе отход">
+          </datalist>
+          <label style="margin-top:8px">Количество (кг)</label>
+          <input id="meat-qty" type="tel" pattern="[0-9]*" inputmode="numeric" />
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button id="meat-send">Добавить</button>
+            <button id="meat-report">Отчет</button>
+            <button id="meat-cancel" class="secondary">Отмена</button>
+          </div>
+        `);
+        document.getElementById('meat-cancel').addEventListener('click', hideModal);
+        document.getElementById('meat-send').addEventListener('click', async ()=>{
+          const meatType = document.getElementById('meat-type').value.trim();
+          const qty = parseFloat(document.getElementById('meat-qty').value);
+          if(!meatType || isNaN(qty) || qty<=0){ toast('Введите корректные данные','error'); return; }
+          try{
+            const resp = await postMeatConsumption({workshop_id: w.id, meat_type: meatType, quantity: qty});
+            hideModal();
+            toast(`${qty} кг ${meatType} добавлено в расход`,`success`);
+            try{ localStorage.setItem('meatflow:update', Date.now().toString()); }catch(e){}
+          }catch(e){ toast('Ошибка при учете мяса','error'); console.error(e); }
+        });
+        document.getElementById('meat-report').addEventListener('click', async ()=>{
+          try{
+            const resp = await fetch(`/meat-report/${w.id}`);
+            const data = await resp.json();
+            let reportHtml = `<h4>Отчет по мясу за ${data.date}</h4>`;
+            reportHtml += `<p><strong>Всего мяса:</strong> ${data.total_meat_consumed} кг</p>`;
+            reportHtml += `<h5>По видам:</h5><ul>`;
+            for(const [meat, qty] of Object.entries(data.meat_breakdown)){
+              reportHtml += `<li>${meat}: ${qty} кг</li>`;
+            }
+            reportHtml += `</ul>`;
+            showModal(reportHtml);
+            document.getElementById('meat-cancel').addEventListener('click', hideModal);
+          }catch(e){ toast('Ошибка при получении отчета','error'); console.error(e); }
         });
       });
     }

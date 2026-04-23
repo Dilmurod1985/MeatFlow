@@ -30,3 +30,19 @@ class WorkshopStatus(BaseModel):
     need_to_produce: Optional[float] = 0.0
     produced_today: Optional[float] = 0.0
     load_percent: Optional[float] = 0.0
+
+
+class MeatConsumptionRequest(BaseModel):
+    workshop_id: int
+    meat_type: str
+    quantity: float
+
+
+class MeatConsumptionResponse(BaseModel):
+    id: int
+    workshop_id: int
+    workshop_name: str
+    meat_type: str
+    quantity: float
+    date: str
+    timestamp: str

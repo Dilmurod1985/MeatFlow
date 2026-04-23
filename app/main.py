@@ -285,3 +285,84 @@ def status_all(db: Session = Depends(get_db)):
             "load_percent": round(load_percent, 2),
         })
     return {"workshops": result}
+
+
+@app.post("/meat-consumption")
+def add_meat_consumption(req: schemas.MeatConsumptionRequest, db: Session = Depends(get_db)):
+    workshop = db.query(models.Workshop).filter(models.Workshop.id == req.workshop_id).first()
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+    
+    consumption = models.MeatConsumption(
+        workshop_id=req.workshop_id,
+        meat_type=req.meat_type,
+        quantity=req.quantity,
+        date=date.today(),
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    db.add(consumption)
+    db.commit()
+    
+    return {
+        "status": "ok", 
+        "message": f"Добавлено {req.quantity} кг {req.meat_type} для {workshop.name}",
+        "consumption_id": consumption.id
+    }
+
+
+@app.get("/meat-consumption/{workshop_id}")
+def get_meat_consumption(workshop_id: int, db: Session = Depends(get_db)):
+    workshop = db.query(models.Workshop).filter(models.Workshop.id == workshop_id).first()
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+    
+    consumptions = db.query(models.MeatConsumption).filter(
+        models.MeatConsumption.workshop_id == workshop_id
+    ).order_by(models.MeatConsumption.date.desc()).all()
+    
+    result = [
+        schemas.MeatConsumptionResponse(
+            id=c.id,
+            workshop_id=c.workshop_id,
+            workshop_name=workshop.name,
+            meat_type=c.meat_type,
+            quantity=c.quantity,
+            date=str(c.date),
+            timestamp=c.timestamp
+        )
+        for c in consumptions
+    ]
+    
+    return {"consumptions": result}
+
+
+@app.get("/meat-report/{workshop_id}")
+def get_meat_report(workshop_id: int, db: Session = Depends(get_db)):
+    workshop = db.query(models.Workshop).filter(models.Workshop.id == workshop_id).first()
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+    
+    # Get today's consumption
+    today = date.today()
+    consumptions = db.query(models.MeatConsumption).filter(
+        models.MeatConsumption.workshop_id == workshop_id,
+        models.MeatConsumption.date == today
+    ).all()
+    
+    # Group by meat type
+    meat_summary = {}
+    total_meat = 0.0
+    
+    for c in consumptions:
+        if c.meat_type not in meat_summary:
+            meat_summary[c.meat_type] = 0.0
+        meat_summary[c.meat_type] += c.quantity
+        total_meat += c.quantity
+    
+    return {
+        "workshop_id": workshop_id,
+        "workshop_name": workshop.name,
+        "date": str(today),
+        "total_meat_consumed": total_meat,
+        "meat_breakdown": meat_summary
+    }

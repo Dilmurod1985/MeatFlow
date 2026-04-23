@@ -62,3 +62,16 @@ class ProductionLog(Base):
     timestamp = Column(String(50), nullable=False)
 
     workshop = relationship("Workshop")
+
+
+class MeatConsumption(Base):
+    __tablename__ = "meat_consumption"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workshop_id = Column(Integer, ForeignKey("workshops.id"), nullable=False)
+    meat_type = Column(String(100), nullable=False)  # Лахм, Качалка, Куринный Бедро и т.д.
+    quantity = Column(Float, nullable=False)  # количество в кг
+    date = Column(Date, nullable=False)
+    timestamp = Column(String(50), nullable=False)
+
+    workshop = relationship("Workshop")
